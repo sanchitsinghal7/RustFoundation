@@ -1,4 +1,4 @@
-#![allow(unused_variables)]
+/*#![allow(unused_variables)]
 #![allow(dead_code)]
 
 mod foundation; // Import the foundation module
@@ -7,7 +7,7 @@ mod apis;
 use std::net::SocketAddr;
 use axum::serve; // ✅ Use `axum::serve` instead of `hyper::Server`
 use tokio::net::TcpListener;
-use apis::routes::create_router;
+use apis::task_routes::create_router;
 
 #[tokio::main]
 async fn main() {
@@ -33,4 +33,53 @@ async fn main() {
 
     // ✅ Use `axum::serve()` instead of `Server::bind()`
     serve(listener, app.into_make_service()).await.unwrap();
+}*/
+
+use axum::{
+    routing::post,
+    Router,
+};
+use dotenv::dotenv;
+use sqlx::PgPool;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tracing::{info, error};
+use tracing_subscriber;
+
+mod apis;
+
+#[tokio::main]
+async fn main() {
+    // Load environment variables from .env file
+    dotenv().ok();
+
+    // Initialize tracing for logging
+    tracing_subscriber::fmt::init();
+
+    // Initialize database pool
+    let pool = init_db_pool().await;
+    let app = apis::task_routes::create_router(pool);
+
+    // Define server address
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    info!("Server running at http://{}", addr);
+
+    // Create a TcpListener
+    let listener = TcpListener::bind(&addr)
+        .await
+        .expect("Failed to bind TCP listener");
+
+    // Start the server using axum::serve
+    if let Err(e) = axum::serve(listener, app.into_make_service()).await {
+        error!("Server error: {}", e);
+    }
+}
+
+async fn init_db_pool() -> PgPool {
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set (e.g., 'postgres://user:pass@localhost/task_db')");
+
+    PgPool::connect(&database_url)
+        .await
+        .expect("Failed to connect to database")
 }
